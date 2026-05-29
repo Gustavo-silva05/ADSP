@@ -14,6 +14,12 @@ extensoes_suportadas = ('.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff')
 arquivos = [f for f in os.listdir(diretorio) if f.lower().endswith(extensoes_suportadas)]
 arquivos.sort(key=lambda x: x.lower())
 
+sizes_trials = [
+    (0, 70, 0, 1000),       # Trial 1: Parte superior
+    (850, 950, 0, 950),     # Trial 2: Parte inferior para imagem menor
+    (1080, 1160, 0, 1100)   # Trial 3: Parte inferior
+]
+
 def processar_imagem(arquivo):
     img_path = os.path.join(diretorio, arquivo)
     imagem = cv2.imread(img_path)
@@ -24,13 +30,13 @@ def processar_imagem(arquivo):
         return {"Arquivo": arquivo, "Erro": "Erro ao carregar a imagem"}
 
     trials = 0
-    while trials < 3:
+    while trials < len(sizes_trials)+1:
         cinza = cv2.cvtColor(imagem, cv2.COLOR_BGR2GRAY)
         
-        if trials == 1:
-            cinza = cinza[580:580+60, 0:600]
-        elif trials == 2:
-            cinza = cinza[570:570+70, 0:950]
+        if trials > 0 and trials <= len(sizes_trials):
+            y1, y2, x1, x2 = sizes_trials[trials - 1]
+            cinza = cinza[y1:y2, x1:x2]
+        
         
         if cinza.size == 0:
             trials += 1
@@ -47,16 +53,16 @@ def processar_imagem(arquivo):
                     "Data": m.group(1) if (m := re.search(r'DATA:\s*([\d/]+)', linha)) else None,
                     "Hora": m.group(1) if (m := re.search(r'HORA:\s*([\dHMINS]+)', linha)) else None,
                     "Vel_Regulamentada": m.group(1) if (m := re.search(r'VEL REG:\s*(\d+\s*KM/H)', linha)) else (m.group(1) if (m := re.search(r'VELMAX:\s*(\d+\s*KM[A-Z/]*)', linha)) else None),
-                    "Vel_Medida": m.group(1) if (m := re.search(r'VEL MEDIDA:\s*(\d+\s*KM/H)', linha)) else (m.group(1) if (m := re.search(r'VELMED:\s*(\d+\s*KM[A-Z/]*)', linha)) else None),
+                    "Vel_Medida": m.group(1) if (m := re.search(r'VEL MEDIDA:\s*(\d+\s*KM/H)', linha)) else (m.group(1) if (m := re.search(r'VELMED:\s*(\d+\s*KM[A-Z/]*)', linha)) else m.group(1) if (m := re.search(r'VELMED\s*(\d+\s*KM[A-Z/]*)', linha)) else None),
                     "Vel_Considerada": m.group(1) if (m := re.search(r'VELCONSIDERADA:\s*(\d+\s*KM/H)', linha)) else (m.group(1) if (m := re.search(r'VELCONSID:\s*(\d+\s*KM[A-Z/]*)', linha)) else None),
                     "Erro": None
                 }
                 
-                if dados_parseados["Vel_Regulamentada"] or dados_parseados["Vel_Medida"] or dados_parseados["Vel_Considerada"]:
+                if dados_parseados["Vel_Regulamentada"] and dados_parseados["Vel_Medida"] and dados_parseados["Vel_Considerada"]:
                     cv2.imwrite(f'{output_dir}/trial{trials}_{arquivo}.jpg', cinza)
                     return dados_parseados
             
-            if trials == 2:
+            if trials == len(sizes_trials):
                 return {
                     "Arquivo": arquivo, "Data": None, "Hora": None, 
                     "Vel_Regulamentada": None, "Vel_Medida": None, 
@@ -76,8 +82,9 @@ if __name__ == "__main__":
         print(f"Nenhuma imagem encontrada no diretório: {diretorio}")
     else:
         dados_finais = []
-        
-        with ProcessPoolExecutor(max_workers=5) as executor:
+        cpus = os.cpu_count() - 2 if os.cpu_count() > 2 else 1
+        print(f"Total de imagens a processar: {len(arquivos)} - CPUS disponíveis: {cpus}")
+        with ProcessPoolExecutor(max_workers=6) as executor:
             resultados = executor.map(processar_imagem, arquivos)
             
             for resultado in resultados:
