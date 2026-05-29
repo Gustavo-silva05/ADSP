@@ -12,6 +12,7 @@ csv_path = os.path.join(output_dir, 'resultados.csv')
 
 extensoes_suportadas = ('.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff')
 arquivos = [f for f in os.listdir(diretorio) if f.lower().endswith(extensoes_suportadas)]
+arquivos.sort(key=lambda x: x.lower())
 
 def processar_imagem(arquivo):
     img_path = os.path.join(diretorio, arquivo)
@@ -86,6 +87,7 @@ if __name__ == "__main__":
         print("\nProcessamento finalizado.")
 
         if dados_finais:
+            dados_finais.sort(key=lambda x: x["Arquivo"])
             with open(csv_path, 'w', newline='', encoding='utf-8') as f:
                 campos = ["Arquivo", "Data", "Hora", "Vel_Regulamentada", "Vel_Medida", "Vel_Considerada", "Erro"]
                 
