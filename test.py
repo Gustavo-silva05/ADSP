@@ -31,6 +31,7 @@ if imagem is not None:
         # 3. Binarização Otsu (Força contraste máximo para o OCR)
         _, imagem_final = cv2.threshold(cinza_realcado, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
         ##
+        cinza = imagem_final
         if trials > 0 and trials <= len(sizes_trials):
             y1, y2, x1, x2 = sizes_trials[trials - 1]
             cinza = cv2.cvtColor(imagem, cv2.COLOR_BGR2GRAY)
