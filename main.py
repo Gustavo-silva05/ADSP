@@ -91,7 +91,7 @@ def processar_imagem(arquivo):
                     "Erro": None
                 }
                 
-                if dados_parseados["Vel_Regulamentada"] and dados_parseados["Vel_Medida"] and dados_parseados["Vel_Considerada"]:
+                if dados_parseados["Vel_Regulamentada"] and dados_parseados["Vel_Medida"]:
                     return dados_parseados
             
             if trials == len(sizes_trials):
