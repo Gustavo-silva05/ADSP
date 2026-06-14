@@ -7,24 +7,24 @@ pytesseract.pytesseract.tesseract_cmd = (
 )
 
 diretorio = os.path.join(os.path.dirname(__file__), 'images')
-img = '12345MFR10100-263174-2409070746140332.jpg'
 
-img_path = os.path.join(diretorio, img)
+img_path = r'C:\Users\Gabriel\Downloads\ADSP-main\images\214506\420253_11.jpg'
 imagem = cv2.imread(img_path)
+
+sizes_trials = [
+    (0, 80, 0, 2000),
+    (880, 1010, 0, 2000),
+    (1040, 1190, 0, 2000)
+]
 
 if imagem is None:
     print("Erro ao carregar a imagem")
     exit()
 
-# ==========================================================
-# NORMALIZA TODAS AS IMAGENS PARA A MESMA ALTURA
-# ==========================================================
-
 TARGET_HEIGHT = 1200
 
-h_original, w_original = imagem.shape[:2]
-
-scale = TARGET_HEIGHT / h_original
+h, w = imagem.shape[:2]
+scale = TARGET_HEIGHT / h
 
 imagem = cv2.resize(
     imagem,
@@ -34,61 +34,22 @@ imagem = cv2.resize(
     interpolation=cv2.INTER_CUBIC
 )
 
-h, w = imagem.shape[:2]
+config_tesseract = '--psm 6'
 
-print(f"\nOriginal : {w_original}x{h_original}")
-print(f"Resize   : {w}x{h}")
+trials = 0
+while trials < len(sizes_trials) + 1:
+    cinza = cv2.cvtColor(imagem, cv2.COLOR_BGR2GRAY)
 
-cinza = cv2.cvtColor(imagem, cv2.COLOR_BGR2GRAY)
+    if trials > 0:
+        y1, y2, x1, x2 = sizes_trials[trials - 1]
+        cinza = cinza[y1:y2, x1:x2]
 
-# ==========================================================
-# TRIAL 0 - IMAGEM COMPLETA
-# ==========================================================
-
-trials = [
-    ("FULL", cinza),
-
-    (
-        "TOP",
-        cinza[
-            int(h * 0.00):int(h * 0.08),
-            :
-        ]
-    ),
-
-    (
-        "BOTTOM_1",
-        cinza[
-            int(h * 0.74):int(h * 0.84),
-            :
-        ]
-    ),
-
-    (
-        "BOTTOM_2",
-        cinza[
-            int(h * 0.90):int(h * 0.99),
-            :
-        ]
-    )
-]
-
-for nome, crop in trials:
-
-    print("\n" + "=" * 80)
-    print(nome)
-    print("=" * 80)
-
-    if crop.size == 0:
-        print("Crop vazio")
+    if cinza.size == 0:
+        trials += 1
         continue
 
-    # ======================================================
-    # UPSCALE 3X
-    # ======================================================
-
-    crop_up = cv2.resize(
-        crop,
+    cinza = cv2.resize(
+        cinza,
         None,
         fx=3,
         fy=3,
@@ -96,9 +57,12 @@ for nome, crop in trials:
     )
 
     resultado = pytesseract.image_to_string(
-        crop_up,
-        config='--psm 6',
+        cinza,
+        config=config_tesseract,
         lang='por'
     )
 
+    print(f'--- Trial {trials} ---')
     print(resultado)
+
+    trials += 1
