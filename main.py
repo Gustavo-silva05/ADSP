@@ -27,9 +27,9 @@ for raiz, diretorios, arquivos_nomes in os.walk(diretorio):
 arquivos_com_caminho.sort(key=lambda x: x.lower())
 
 sizes_trials = [
-    (0, 80, 0, 2000),
+    (1040, 1190, 0, 2000),
     (880, 1010, 0, 2000),
-    (1040, 1190, 0, 2000)
+    (0, 80, 0, 2000)
 ]
 
 def processar_imagem(arquivo):
