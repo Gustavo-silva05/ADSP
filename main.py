@@ -5,32 +5,58 @@ import os
 import csv
 from concurrent.futures import ProcessPoolExecutor
 
+#pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+pytesseract.pytesseract.tesseract_cmd = r'C:\Users\g.rebello\AppData\Local\Programs\Tesseract-OCR\tesseract.exe' 
+os.environ['TESSDATA_PREFIX'] = r'C:\Users\g.rebello\AppData\Local\Programs\Tesseract-OCR\tessdata'
+
 diretorio = os.path.join(os.path.dirname(__file__), 'images')
 output_dir = './output'
 os.makedirs(output_dir, exist_ok=True)
 csv_path = os.path.join(output_dir, 'resultados.csv')
 
 extensoes_suportadas = ('.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff')
-arquivos = [f for f in os.listdir(diretorio) if f.lower().endswith(extensoes_suportadas)]
-arquivos.sort(key=lambda x: x.lower())
+
+arquivos_com_caminho = []
+for raiz, diretorios, arquivos_nomes in os.walk(diretorio):
+    for f in arquivos_nomes:
+        if f.lower().endswith(extensoes_suportadas):
+            caminho_relativo = os.path.relpath(os.path.join(raiz, f), diretorio)
+            arquivos_com_caminho.append(caminho_relativo)
+
+arquivos_com_caminho.sort(key=lambda x: x.lower())
 
 sizes_trials = [
-    (0, 70, 0, 1000),       # Trial 1: Parte superior
-    (850, 950, 0, 950),     # Trial 2: Parte inferior para imagem menor
-    (1080, 1160, 0, 1100)   # Trial 3: Parte inferior
+    (0, 80, 0, 2000),
+    (880, 1010, 0, 2000),
+    (1080, 1190, 0, 2000)
 ]
 
 def processar_imagem(arquivo):
     img_path = os.path.join(diretorio, arquivo)
     imagem = cv2.imread(img_path)
     
-    print(f"--- Processando: {arquivo} ---")
-    
     if imagem is None:
         return {"Arquivo": arquivo, "Erro": "Erro ao carregar a imagem"}
 
+    TARGET_HEIGHT = 1200
+
+    h, w = imagem.shape[:2]
+
+    scale = TARGET_HEIGHT / h
+
+    imagem = cv2.resize(
+        imagem,
+        None,
+        fx=scale,
+        fy=scale,
+        interpolation=cv2.INTER_CUBIC
+    )
+
+    print(f"--- Processando: {arquivo} ---")
+    
     trials = 0
     while trials < len(sizes_trials)+1:
+
         cinza = cv2.cvtColor(imagem, cv2.COLOR_BGR2GRAY)
         
         if trials > 0 and trials <= len(sizes_trials):
@@ -41,7 +67,14 @@ def processar_imagem(arquivo):
         if cinza.size == 0:
             trials += 1
             continue
-        
+
+        cinza = cv2.resize(
+            cinza,
+            None,
+            fx=3,
+            fy=3,
+            interpolation=cv2.INTER_CUBIC
+        )
         config_tesseract = '--psm 6'
         resultado = pytesseract.image_to_string(cinza, config=config_tesseract, lang='por')
         linhas = [linha.upper().replace('.','') for linha in resultado.split('\n') if linha.strip()]
@@ -52,14 +85,13 @@ def processar_imagem(arquivo):
                     "Arquivo": arquivo,
                     "Data": m.group(1) if (m := re.search(r'DATA:\s*([\d/]+)', linha)) else None,
                     "Hora": m.group(1) if (m := re.search(r'HORA:\s*([\dHMINS]+)', linha)) else None,
-                    "Vel_Regulamentada": m.group(1) if (m := re.search(r'VEL REG:\s*(\d+\s*KM/H)', linha)) else (m.group(1) if (m := re.search(r'VELMAX:\s*(\d+\s*KM[A-Z/]*)', linha)) else None),
-                    "Vel_Medida": m.group(1) if (m := re.search(r'VEL MEDIDA:\s*(\d+\s*KM/H)', linha)) else (m.group(1) if (m := re.search(r'VELMED:\s*(\d+\s*KM[A-Z/]*)', linha)) else m.group(1) if (m := re.search(r'VELMED\s*(\d+\s*KM[A-Z/]*)', linha)) else None),
-                    "Vel_Considerada": m.group(1) if (m := re.search(r'VELCONSIDERADA:\s*(\d+\s*KM/H)', linha)) else (m.group(1) if (m := re.search(r'VELCONSID:\s*(\d+\s*KM[A-Z/]*)', linha)) else None),
+                    "Vel_Regulamentada": m.group(1) if (m := re.search(r'VEL REG[^0-9]*(\d+\s*K[A-Z/]*)', linha)) else (m.group(1) if (m := re.search(r'VELMAX[^0-9]*(\d+\s*K[A-Z/]*)', linha)) else None),
+                    "Vel_Medida": m.group(1) if (m := re.search(r'VEL MEDIDA[^0-9]*(\d+\s*K[A-Z/]*)', linha)) else (m.group(1) if (m := re.search(r'VELMED[^0-9]*(\d+\s*K[A-Z/]*)', linha)) else m.group(1) if (m := re.search(r'VELMED\s*(\d+\s*K[A-Z/]*)', linha)) else None),
+                    "Vel_Considerada": m.group(1) if (m := re.search(r'VELCONSIDERADA[^0-9]*(\d+\s*K[A-Z/]*)', linha)) else (m.group(1) if (m := re.search(r'VELCONSID[^0-9]*(\d+\s*K[A-Z/]*)', linha)) else None),
                     "Erro": None
                 }
                 
-                if dados_parseados["Vel_Regulamentada"] and dados_parseados["Vel_Medida"] and dados_parseados["Vel_Considerada"]:
-                    cv2.imwrite(f'{output_dir}/trial{trials}_{arquivo}.jpg', cinza)
+                if dados_parseados["Vel_Regulamentada"] and dados_parseados["Vel_Medida"]:
                     return dados_parseados
             
             if trials == len(sizes_trials):
@@ -78,14 +110,14 @@ def processar_imagem(arquivo):
 
 
 if __name__ == "__main__":
-    if not arquivos:
+    if not arquivos_com_caminho:
         print(f"Nenhuma imagem encontrada no diretório: {diretorio}")
     else:
         dados_finais = []
-        cpus = os.cpu_count() - 2 if os.cpu_count() > 2 else 1
-        print(f"Total de imagens a processar: {len(arquivos)} - CPUS disponíveis: {cpus}")
+        cpus = os.cpu_count() - 1 if os.cpu_count() > 2 else 1
+        print(f"Total de imagens a processar: {len(arquivos_com_caminho)} - CPUS disponíveis: {cpus}")
         with ProcessPoolExecutor(max_workers=6) as executor:
-            resultados = executor.map(processar_imagem, arquivos)
+            resultados = executor.map(processar_imagem, arquivos_com_caminho)
             
             for resultado in resultados:
                 if resultado:
