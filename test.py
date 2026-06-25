@@ -8,7 +8,7 @@ pytesseract.pytesseract.tesseract_cmd = (
 
 diretorio = os.path.join(os.path.dirname(__file__), 'images')
 
-img_path = r'C:\Users\Gabriel\Downloads\ADSP-main\images\214506\420253_11.jpg'
+img_path = r'C:\Users\Gabriel\Downloads\ADSP-main\images\214973\421187_11.jpg'
 imagem = cv2.imread(img_path)
 
 sizes_trials = [

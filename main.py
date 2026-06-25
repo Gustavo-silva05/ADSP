@@ -6,6 +6,24 @@ import csv
 import time
 from concurrent.futures import ProcessPoolExecutor
 
+def resultado_valido(dados):
+    try:
+        reg = int(dados["Vel_Regulamentada (Km/h)"])
+        med = int(dados["Vel_Medida (Km/h)"])
+        cons_raw = dados.get("Vel_Considerada (Km/h)")
+        cons = int(cons_raw) if cons_raw else None
+
+        if med < reg:
+            return False  
+        if cons is not None:
+            if cons > med:
+                return False 
+            if cons < reg:
+                return False  
+        return True
+    except (ValueError, TypeError):
+        return False
+
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 # pytesseract.pytesseract.tesseract_cmd = r'C:\Users\g.rebello\AppData\Local\Programs\Tesseract-OCR\tesseract.exe' 
 # os.environ['TESSDATA_PREFIX'] = r'C:\Users\g.rebello\AppData\Local\Programs\Tesseract-OCR\tessdata'
@@ -27,9 +45,9 @@ for raiz, diretorios, arquivos_nomes in os.walk(diretorio):
 arquivos_com_caminho.sort(key=lambda x: x.lower())
 
 sizes_trials = [
-    (0, 80, 0, 2000),
+    (1040, 1190, 0, 2000),
     (880, 1010, 0, 2000),
-    (1040, 1190, 0, 2000)
+    (0, 80, 0, 2000)
 ]
 
 def processar_imagem(arquivo):
@@ -67,6 +85,8 @@ def processar_imagem(arquivo):
         "Erro": None
     }
 
+    ultimo_parcial = None
+    
     while trials < len(sizes_trials)+1:
 
         cinza = cv2.cvtColor(imagem, cv2.COLOR_BGR2GRAY)
@@ -129,18 +149,27 @@ def processar_imagem(arquivo):
                         dados_parseados["Vel_Considerada (Km/h)"] = m.group(1)
 
                 if dados_parseados["Vel_Regulamentada (Km/h)"] and dados_parseados["Vel_Medida (Km/h)"] and dados_parseados["Data"] and dados_parseados["Hora"]:
-                    return dados_parseados   
+                    if resultado_valido(dados_parseados):
+                        return dados_parseados
+                    else:
+                        if (
+                            dados_parseados["Vel_Regulamentada (Km/h)"] or
+                            dados_parseados["Vel_Medida (Km/h)"] or
+                            dados_parseados["Vel_Considerada (Km/h)"]
+                        ):
+                            ultimo_parcial = dados_parseados.copy()
+
+                        dados_parseados["Vel_Regulamentada (Km/h)"] = None
+                        dados_parseados["Vel_Medida (Km/h)"] = None
+                        dados_parseados["Vel_Considerada (Km/h)"] = None
 
             if trials == len(sizes_trials):
-                return {
-                    "Arquivo": arquivo,
-                    "Data": None,
-                    "Hora": None,
-                    "Vel_Regulamentada (Km/h)": None,
-                    "Vel_Medida (Km/h)": None,
-                    "Vel_Considerada (Km/h)": None,
-                    "Erro": "Dados não encontrados"
-                }
+                if ultimo_parcial:
+                    ultimo_parcial["Erro"] = "Resultado parcial"
+                    return ultimo_parcial
+
+                dados_parseados["Erro"] = "Dados não encontrados"
+                return dados_parseados
                 
         except Exception as e:
             print(f"Erro em {arquivo}: {e}")
