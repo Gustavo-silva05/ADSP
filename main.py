@@ -114,9 +114,10 @@ if __name__ == "__main__":
         print(f"Nenhuma imagem encontrada no diretório: {diretorio}")
     else:
         dados_finais = []
-        cpus = os.cpu_count() - 2 if os.cpu_count() > 2 else 1
+        cpus_avalible = os.cpu_count() - 2 if os.cpu_count() > 2 else 1
+        cpus  = min(cpus_avalible, 10)
         print(f"Total de imagens a processar: {len(arquivos_com_caminho)} - CPUS disponíveis: {cpus}")
-        with ProcessPoolExecutor(max_workers=10) as executor:
+        with ProcessPoolExecutor(max_workers=cpus) as executor:
             resultados = executor.map(processar_imagem, arquivos_com_caminho)
             
             for resultado in resultados:
