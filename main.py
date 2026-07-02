@@ -6,8 +6,8 @@ import csv
 from concurrent.futures import ProcessPoolExecutor
 
 #pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-pytesseract.pytesseract.tesseract_cmd = r'C:\Users\g.rebello\AppData\Local\Programs\Tesseract-OCR\tesseract.exe' 
-os.environ['TESSDATA_PREFIX'] = r'C:\Users\g.rebello\AppData\Local\Programs\Tesseract-OCR\tessdata'
+# pytesseract.pytesseract.tesseract_cmd = r'C:\Users\g.rebello\AppData\Local\Programs\Tesseract-OCR\tesseract.exe' 
+# os.environ['TESSDATA_PREFIX'] = r'C:\Users\g.rebello\AppData\Local\Programs\Tesseract-OCR\tessdata'
 
 diretorio = os.path.join(os.path.dirname(__file__), 'images')
 output_dir = './output'
@@ -26,9 +26,9 @@ for raiz, diretorios, arquivos_nomes in os.walk(diretorio):
 arquivos_com_caminho.sort(key=lambda x: x.lower())
 
 sizes_trials = [
-    (0, 80, 0, 2000),
+    (1080, 1190, 0, 2000),
     (880, 1010, 0, 2000),
-    (1080, 1190, 0, 2000)
+    (0, 80, 0, 2000),
 ]
 
 def processar_imagem(arquivo):
@@ -59,8 +59,8 @@ def processar_imagem(arquivo):
 
         cinza = cv2.cvtColor(imagem, cv2.COLOR_BGR2GRAY)
         
-        if trials > 0 and trials <= len(sizes_trials):
-            y1, y2, x1, x2 = sizes_trials[trials - 1]
+        if trials >= 0 and trials <= len(sizes_trials) - 1:
+            y1, y2, x1, x2 = sizes_trials[trials]
             cinza = cinza[y1:y2, x1:x2]
         
         
@@ -114,9 +114,9 @@ if __name__ == "__main__":
         print(f"Nenhuma imagem encontrada no diretório: {diretorio}")
     else:
         dados_finais = []
-        cpus = os.cpu_count() - 1 if os.cpu_count() > 2 else 1
+        cpus = os.cpu_count() - 2 if os.cpu_count() > 2 else 1
         print(f"Total de imagens a processar: {len(arquivos_com_caminho)} - CPUS disponíveis: {cpus}")
-        with ProcessPoolExecutor(max_workers=6) as executor:
+        with ProcessPoolExecutor(max_workers=10) as executor:
             resultados = executor.map(processar_imagem, arquivos_com_caminho)
             
             for resultado in resultados:
