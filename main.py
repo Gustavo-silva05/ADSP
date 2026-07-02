@@ -3,7 +3,26 @@ import pytesseract
 import re
 import os
 import csv
+import time
 from concurrent.futures import ProcessPoolExecutor
+
+def resultado_valido(dados):
+    try:
+        reg = int(dados["Vel_Regulamentada (Km/h)"])
+        med = int(dados["Vel_Medida (Km/h)"])
+        cons_raw = dados.get("Vel_Considerada (Km/h)")
+        cons = int(cons_raw) if cons_raw else None
+
+        if med < reg:
+            return False  
+        if cons is not None:
+            if cons > med:
+                return False 
+            if cons < reg:
+                return False  
+        return True
+    except (ValueError, TypeError):
+        return False
 
 #pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 # pytesseract.pytesseract.tesseract_cmd = r'C:\Users\g.rebello\AppData\Local\Programs\Tesseract-OCR\tesseract.exe' 
@@ -26,7 +45,7 @@ for raiz, diretorios, arquivos_nomes in os.walk(diretorio):
 arquivos_com_caminho.sort(key=lambda x: x.lower())
 
 sizes_trials = [
-    (1080, 1190, 0, 2000),
+    (1040, 1190, 0, 2000),
     (880, 1010, 0, 2000),
     (0, 80, 0, 2000),
 ]
@@ -55,11 +74,24 @@ def processar_imagem(arquivo):
     print(f"--- Processando: {arquivo} ---")
     
     trials = 0
+
+    dados_parseados = {
+        "Arquivo": arquivo,
+        "Data": None,
+        "Hora": None,
+        "Vel_Regulamentada (Km/h)": None,
+        "Vel_Medida (Km/h)": None,
+        "Vel_Considerada (Km/h)": None,
+        "Erro": None
+    }
+
+    ultimo_parcial = None
+    
     while trials < len(sizes_trials)+1:
 
         cinza = cv2.cvtColor(imagem, cv2.COLOR_BGR2GRAY)
         
-        if trials >= 0 and trials <= len(sizes_trials) - 1:
+        if trials >= 0 and trials <= len(sizes_trials)-1:
             y1, y2, x1, x2 = sizes_trials[trials]
             cinza = cinza[y1:y2, x1:x2]
         
@@ -77,32 +109,70 @@ def processar_imagem(arquivo):
         )
         config_tesseract = '--psm 6'
         resultado = pytesseract.image_to_string(cinza, config=config_tesseract, lang='por')
-        linhas = [linha.upper().replace('.','') for linha in resultado.split('\n') if linha.strip()]
+        linhas = [
+            ''.join(linha.upper().replace('.', '').split())
+            for linha in resultado.split('\n')
+            if linha.strip()
+        ]
 
         try:
             for linha in linhas:
-                dados_parseados = {
-                    "Arquivo": arquivo,
-                    "Data": m.group(1) if (m := re.search(r'DATA:\s*([\d/]+)', linha)) else None,
-                    "Hora": m.group(1) if (m := re.search(r'HORA:\s*([\dHMINS]+)', linha)) else None,
-                    "Vel_Regulamentada": m.group(1) if (m := re.search(r'VEL REG[^0-9]*(\d+\s*K[A-Z/]*)', linha)) else (m.group(1) if (m := re.search(r'VELMAX[^0-9]*(\d+\s*K[A-Z/]*)', linha)) else None),
-                    "Vel_Medida": m.group(1) if (m := re.search(r'VEL MEDIDA[^0-9]*(\d+\s*K[A-Z/]*)', linha)) else (m.group(1) if (m := re.search(r'VELMED[^0-9]*(\d+\s*K[A-Z/]*)', linha)) else m.group(1) if (m := re.search(r'VELMED\s*(\d+\s*K[A-Z/]*)', linha)) else None),
-                    "Vel_Considerada": m.group(1) if (m := re.search(r'VELCONSIDERADA[^0-9]*(\d+\s*K[A-Z/]*)', linha)) else (m.group(1) if (m := re.search(r'VELCONSID[^0-9]*(\d+\s*K[A-Z/]*)', linha)) else None),
-                    "Erro": None
-                }
-                
-                if dados_parseados["Vel_Regulamentada"] and dados_parseados["Vel_Medida"]:
-                    return dados_parseados
-            
+                if not dados_parseados["Data"]:
+                    m = re.search(r'DATA:\s*([\d/]+)', linha)
+                    if m:
+                        dados_parseados["Data"] = m.group(1)
+
+                if not dados_parseados["Hora"]:
+                    m = re.search(r'HORA:\s*([\dHMINS]+)', linha)
+                    if m:
+                        dados_parseados["Hora"] = m.group(1)
+
+                if not dados_parseados["Vel_Regulamentada (Km/h)"]:
+                    m = re.search(r'VELREG[^0-9]*(\d+)', linha)
+                    if not m:
+                        m = re.search(r'VELMAX[^0-9]*(\d+)', linha)
+                    if m:
+                        dados_parseados["Vel_Regulamentada (Km/h)"] = m.group(1)
+
+                if not dados_parseados["Vel_Medida (Km/h)"]:
+                    m = re.search(r'VELMEDIDA[^0-9]*(\d+)', linha)
+                    if not m:
+                        m = re.search(r'VELMED[^0-9]*(\d+)', linha)
+                    if m:
+                        dados_parseados["Vel_Medida (Km/h)"] = m.group(1)
+
+                if not dados_parseados["Vel_Considerada (Km/h)"]:
+                    m = re.search(r'VELCONSIDERADA[^0-9]*(\d+)', linha)
+                    if not m:
+                        m = re.search(r'VELCONSID[^0-9]*(\d+)', linha)
+                    if m:
+                        dados_parseados["Vel_Considerada (Km/h)"] = m.group(1)
+
+                if dados_parseados["Vel_Regulamentada (Km/h)"] and dados_parseados["Vel_Medida (Km/h)"] and dados_parseados["Data"] and dados_parseados["Hora"]:
+                    if resultado_valido(dados_parseados):
+                        return dados_parseados
+                    else:
+                        if (
+                            dados_parseados["Vel_Regulamentada (Km/h)"] or
+                            dados_parseados["Vel_Medida (Km/h)"] or
+                            dados_parseados["Vel_Considerada (Km/h)"]
+                        ):
+                            ultimo_parcial = dados_parseados.copy()
+
+                        dados_parseados["Vel_Regulamentada (Km/h)"] = None
+                        dados_parseados["Vel_Medida (Km/h)"] = None
+                        dados_parseados["Vel_Considerada (Km/h)"] = None
+
             if trials == len(sizes_trials):
-                return {
-                    "Arquivo": arquivo, "Data": None, "Hora": None, 
-                    "Vel_Regulamentada": None, "Vel_Medida": None, 
-                    "Vel_Considerada": None, "Erro": 'Dados não encontrados'
-                }
+                if ultimo_parcial:
+                    ultimo_parcial["Erro"] = "Resultado parcial"
+                    return ultimo_parcial
+
+                dados_parseados["Erro"] = "Dados não encontrados"
+                return dados_parseados
                 
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Erro em {arquivo}: {e}")
         finally:
             trials += 1
             
@@ -110,6 +180,7 @@ def processar_imagem(arquivo):
 
 
 if __name__ == "__main__":
+    start_time = time.perf_counter()
     if not arquivos_com_caminho:
         print(f"Nenhuma imagem encontrada no diretório: {diretorio}")
     else:
@@ -129,10 +200,11 @@ if __name__ == "__main__":
         if dados_finais:
             dados_finais.sort(key=lambda x: x["Arquivo"])
             with open(csv_path, 'w', newline='', encoding='utf-8') as f:
-                campos = ["Arquivo", "Data", "Hora", "Vel_Regulamentada", "Vel_Medida", "Vel_Considerada", "Erro"]
+                campos = ["Arquivo", "Data", "Hora", "Vel_Regulamentada (Km/h)", "Vel_Medida (Km/h)", "Vel_Considerada (Km/h)", "Erro"]
                 
                 writer = csv.DictWriter(f, fieldnames=campos)
                 writer.writeheader()
                 writer.writerows(dados_finais)
-                
+            end_time = time.perf_counter()
+            print(f"Tempo total de processamento: {end_time - start_time:.2f} segundos")   
             print(f"Resultados salvos em: {csv_path}")
